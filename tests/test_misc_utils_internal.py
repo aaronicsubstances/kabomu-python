@@ -66,23 +66,36 @@ def test_parse_int48_for_errors(input):
     with pytest.raises(Exception):
         misc_utils_internal.parse_int_48(input)
 
-def test_parse_int32():
-    input = " 67 "
-    expected = 67
+@pytest.mark.parametrize("input, expected",
+    [
+        ("0", 0),
+        ("1", 1),
+        ("2", 2),
+        (" 20", 20),
+        (" 200 ", 200),
+        ("-1000", -1000),
+        (1000000, 1_000_000),
+        ("-1000000000", -1_000_000_000),
+        ("2147483647", 2_147_483_647),
+        ("-2147483648", -2_147_483_648),
+        # remainder are verifications
+        (2.0, 2.0),
+        (2_147_483_647, 2_147_483_647),
+        (-2_147_483_648, -2_147_483_648)
+    ])
+def test_parse_int32(input, expected):
     actual = misc_utils_internal.parse_int_32(input)
     assert actual == expected
 
-    input = "172"
-    expected = 172
-    actual = misc_utils_internal.parse_int_32(input)
-    assert actual == expected
-
-def test_parse_int32_for_errors():
+@pytest.mark.parametrize("input",
+    [
+        "", " ", None, "false", "xyz", "1.23", "2.0",
+        "2147483648", "-2147483649", "50000000000000",
+        [], {}
+    ])
+def test_parse_int32_for_errors(input):
     with pytest.raises(Exception):
-        misc_utils_internal.parse_int_32("")
-    
-    with pytest.raises(Exception):
-        misc_utils_internal.parse_int_32("x")
+        misc_utils_internal.parse_int_32(input)
 
 @pytest.mark.parametrize("data, offset, length, expected",
     [

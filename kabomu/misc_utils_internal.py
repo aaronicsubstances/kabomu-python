@@ -11,11 +11,14 @@ def deserialize_int32_be(src, offset: int):
 def parse_int_48(input):
     n = int(input)
     if n < -140_737_488_355_328 or n > 140_737_488_355_327:
-        raise IllegalArgumentError(f"invalid 48-bit signed integer: {n}")
+        raise IllegalArgumentError(f"invalid 48-bit integer: {n}")
     return n
 
 def parse_int_32(input):
-     return int(input)
+    n = int(input)
+    if n < -2_147_483_648 or n > 2_147_483_647:
+        raise IllegalArgumentError(f"invalid 32-bit integer: {n}")
+    return n
 
 def is_valid_byte_buffer_slice(data, offset: int, length: int):
     if data == None:

@@ -3,8 +3,6 @@ import pytest
 from kabomu import io_utils_internal
 from kabomu.tlv import tlv_utils
 
-from kabomu.errors import KabomuIOError
-
 from tests.shared import comparison_utils
 
 @pytest.mark.parametrize("tag, length, expected",  

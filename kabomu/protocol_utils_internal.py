@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from trio.abc import ReceiveStream, SendStream
 
+from kabomu.quasi_http_utils import _get_optional_attr
 from kabomu.tlv import tlv_utils
 from kabomu import misc_utils_internal, io_utils_internal, quasi_http_utils
 from kabomu.errors import IllegalArgumentError, ExpectationViolationError,\
@@ -24,14 +25,14 @@ async def run_timeout_scheduler(
         timeout_scheduler, for_client, proc):
     timeout_msg = "send timeout" if for_client else "receive_timeout"
     result = await timeout_scheduler(proc)
-    error = get_optional_attr(result, "error")
+    error = _get_optional_attr(result, "error")
     if error:
         raise error
-    if get_optional_attr(result, "timeout"):
+    if _get_optional_attr(result, "timeout"):
         raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_TIMEOUT,
             timeout_msg)
 
-    response = get_optional_attr(result, "response")
+    response = _get_optional_attr(result, "response")
     if for_client and not response:
         raise QuasiHttpError("no response from timeout scheduler")
     return response
@@ -159,39 +160,39 @@ async def write_entity_to_transport(
         raise MissingDependencyError("no writable stream found for transport")
     if is_response:
         response = entity
-        headers = get_optional_attr(response, "headers")
-        body = get_optional_attr(response, "body")
-        content_length = get_optional_attr(response, "content_length")
+        headers = _get_optional_attr(response, "headers")
+        body = _get_optional_attr(response, "body")
+        content_length = _get_optional_attr(response, "content_length")
         if not content_length:
             content_length = 0
-        status_code = get_optional_attr(response, "status_code")
+        status_code = _get_optional_attr(response, "status_code")
         if not status_code:
             status_code = 0
         req_or_status_line = []
         req_or_status_line.append(
-            get_optional_attr(response, "http_version"))
+            _get_optional_attr(response, "http_version"))
         req_or_status_line.append(status_code)
         req_or_status_line.append(
-            get_optional_attr(response, "http_status_message"))
+            _get_optional_attr(response, "http_status_message"))
         req_or_status_line.append(content_length)
     else:
         request = entity
-        headers = get_optional_attr(request, "headers")
-        body = get_optional_attr(request, "body")
-        content_length = get_optional_attr(request, "content_length")
+        headers = _get_optional_attr(request, "headers")
+        body = _get_optional_attr(request, "body")
+        content_length = _get_optional_attr(request, "content_length")
         if not content_length:
             content_length = 0
         req_or_status_line = []
         req_or_status_line.append(
-            get_optional_attr(request, "http_method"))
+            _get_optional_attr(request, "http_method"))
         req_or_status_line.append(
-            get_optional_attr(request, "target"))
+            _get_optional_attr(request, "target"))
         req_or_status_line.append(
-            get_optional_attr(request, "http_version"))
+            _get_optional_attr(request, "http_version"))
         req_or_status_line.append(content_length)
     # treat content lengths totally separate from body
     # due to how HEAD method works.
-    max_headers_size = get_optional_attr(
+    max_headers_size = _get_optional_attr(
         connection, "processing_options", "max_headers_size")
     await write_quasi_http_headers(is_response,
         writable_stream, req_or_status_line, headers,
@@ -214,9 +215,9 @@ async def read_entity_from_transport(
     if not readable_stream:
         raise MissingDependencyError("no readable stream found for transport")
     headers_receiver = {}
-    processing_options = get_optional_attr(
+    processing_options = _get_optional_attr(
         connection, "processing_options")
-    max_headers_size = get_optional_attr(
+    max_headers_size = _get_optional_attr(
         processing_options, "max_headers_size")
     req_or_status_line = await read_quasi_http_headers(
         is_response, readable_stream, headers_receiver,
@@ -256,7 +257,7 @@ async def read_entity_from_transport(
         if body:
             body_size_limit = None
             if processing_options:
-                body_size_limit = get_optional_attr(
+                body_size_limit = _get_optional_attr(
                     processing_options, "max_response_body_size")
                 if not body_size_limit or body_size_limit > 0:
                     body = tlv_utils.create_max_length_enforcing_stream(
@@ -265,7 +266,7 @@ async def read_entity_from_transport(
         return response
     else:
         request = SimpleNamespace(disposer=None)
-        request.environment = get_optional_attr(
+        request.environment = _get_optional_attr(
             connection, "environment")
         request.http_method = req_or_status_line[0]
         request.target = req_or_status_line[1]
@@ -275,9 +276,4 @@ async def read_entity_from_transport(
         request.body = body
         return request
 
-def get_optional_attr(instance, *args):
-    for n in args:
-        if instance == None or not instance.hasattr(n):
-            return None
-        instance = instance.getattr(n)
-    return instance
+

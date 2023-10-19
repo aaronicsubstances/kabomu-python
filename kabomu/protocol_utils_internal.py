@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from trio.abc import ReceiveStream, SendStream
 
-from kabomu.quasi_http_utils import _get_optional_attr
+from kabomu.quasi_http_utils import _get_optional_attr, _bind_method
 from kabomu.tlv import tlv_utils
 from kabomu import misc_utils_internal, io_utils_internal, quasi_http_utils
 from kabomu.errors import IllegalArgumentError, ExpectationViolationError,\
@@ -15,12 +15,6 @@ from kabomu.errors import IllegalArgumentError, ExpectationViolationError,\
     QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,\
     QUASI_HTTP_ERROR_REASON_MESSAGE_LENGTH_LIMIT_EXCEEDED
 
-async def wrap_timeout_task(timeout_task, for_client):
-    timeout_msg = "send timeout" if for_client else "receive timeout"
-    if await timeout_task:
-        raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_TIMEOUT,
-            timeout_msg)
-    
 async def run_timeout_scheduler(
         timeout_scheduler, for_client, proc):
     timeout_msg = "send timeout" if for_client else "receive timeout"
@@ -47,14 +41,14 @@ def validate_http_header_section(is_response, csv_data):
         raise ExpectationViolationError(
             "expected special header to have 4 values " +
             f"instead of {len(special_header)}")
-    tag = "status" if is_response else "request"
+    error_tag = "status" if is_response else "request"
     for i in range(len(special_header)):
         item = special_header[i]
         if not contains_only_printable_ascii_chars(
                 item, is_response and i == 2):
             raise QuasiHttpError(
                 QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
-                    f"quasi http {tag} line " +
+                    f"quasi http {error_tag} line " +
                     "field contains spaces, newlines or " +
                     "non-printable ASCII characters: " +
                     item)
@@ -169,12 +163,12 @@ def decode_quasi_http_headers(is_response, buffer,
             QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
             "invalid quasi http headers")
     
-    tag = "status" if is_response else "request"
+    error_tag = "status" if is_response else "request"
     special_header = csv_data[0]
     if len(special_header) < 4:
         raise QuasiHttpError(
             QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
-            f"invalid quasi http {tag} line")
+            f"invalid quasi http {error_tag} line")
     for header_row in csv_data[1:]:
         if len(header_row) < 2:
             continue
@@ -282,9 +276,10 @@ async def write_entity_to_transport(
         await io_utils_internal.copy(body, writable_stream)
     else:
         # proceed, even if content length is 0.
-        encoded_body = tlv_utils.create_tlv_encoding_readable_stream(
-            body, tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK)
-        await io_utils_internal.copy(encoded_body, writable_stream)
+        body_writer = tlv_utils.create_tlv_encoding_writable_stream(
+            writable_stream, tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK)
+        await io_utils_internal.copy(body, body_writer)
+        await body_writer.send_eof()
 
 async def read_entity_from_transport(
         is_response, readable_stream: ReceiveStream, connection):
@@ -298,15 +293,16 @@ async def read_entity_from_transport(
     req_or_status_line = await read_quasi_http_headers(
         is_response, readable_stream, headers_receiver,
         max_headers_size)
-    tag = 'response' if is_response else 'request'
+    error_tag = 'response' if is_response else 'request'
     try:
         content_length = misc_utils_internal.parse_int_48(
             req_or_status_line[3])
     except Exception as ex:
         quasi_ex = QuasiHttpError(QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
-            f"invalid quasi http {tag} content length")
+            f"invalid quasi http {error_tag} content length")
         quasi_ex.__cause__ = ex
         raise quasi_ex
+    body = None
     if content_length:
         if content_length > 0:
             body = tlv_utils.create_content_length_enforcing_stream(
@@ -317,8 +313,8 @@ async def read_entity_from_transport(
                 tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK,
                 tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK_EXT)
     if is_response:
-        response = SimpleNamespace(environment=None,
-                                   release=default_release_func)
+        response = SimpleNamespace(environment=None)
+        response.release = _bind_method(default_release_func, response)
         response.http_version = req_or_status_line[0]
         try:
             response.status_code = misc_utils_internal.parse_int_32(
@@ -342,7 +338,8 @@ async def read_entity_from_transport(
         response.body = body
         return response
     else:
-        request = SimpleNamespace(release=default_release_func)
+        request = SimpleNamespace()
+        request.release = _bind_method(default_release_func, request)
         request.environment = _get_optional_attr(
             connection, "environment")
         request.http_method = req_or_status_line[0]
@@ -353,5 +350,7 @@ async def read_entity_from_transport(
         request.body = body
         return request
 
-async def default_release_func(_):
-    pass
+async def default_release_func(self):
+    body = _get_optional_attr(self, "body")
+    if body is not None:
+        await body.aclose()

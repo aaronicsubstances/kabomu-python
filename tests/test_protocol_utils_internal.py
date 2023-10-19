@@ -3,69 +3,13 @@ import pytest
 from types import SimpleNamespace
 
 from kabomu import protocol_utils_internal
-from kabomu.errors import IllegalArgumentError, KabomuIOError,\
-    MissingDependencyError,\
+from kabomu.errors import KabomuIOError,\
     QuasiHttpError,\
     QUASI_HTTP_ERROR_REASON_GENERAL,\
     QUASI_HTTP_ERROR_REASON_TIMEOUT,\
-    QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,\
-    QUASI_HTTP_ERROR_REASON_MESSAGE_LENGTH_LIMIT_EXCEEDED
+    QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION
 
 from tests.shared import comparison_utils
-
-async def test_wrap_timeout_task_1():
-    async def task_generator():
-        return False
-    task = task_generator()
-    await protocol_utils_internal.wrap_timeout_task(task, True)
-
-async def test_wrap_timeout_task_2():
-    async def task_generator():
-        return False
-    task = task_generator()
-    await protocol_utils_internal.wrap_timeout_task(task, False)
-
-async def test_wrap_timeout_task_3():
-    async def task_generator():
-        return True
-    async def test_routine():
-        await protocol_utils_internal.wrap_timeout_task(
-            task_generator(), True)
-    actual_ex = await comparison_utils.assert_throws(
-        test_routine, QuasiHttpError)
-    assert "send timeout" in str(actual_ex)
-    assert actual_ex.reason_code == QUASI_HTTP_ERROR_REASON_TIMEOUT
-
-async def test_wrap_timeout_task_4():
-    async def task_generator():
-        return True
-    async def test_routine():
-        await protocol_utils_internal.wrap_timeout_task(
-            task_generator(), False)
-    actual_ex = await comparison_utils.assert_throws(
-        test_routine, QuasiHttpError)
-    assert "receive timeout" in str(actual_ex)
-    assert actual_ex.reason_code == QUASI_HTTP_ERROR_REASON_TIMEOUT
-
-async def test_wrap_timeout_task_5():
-    async def task_generator():
-        raise ValueError("th")
-    async def test_routine():
-        await protocol_utils_internal.wrap_timeout_task(
-            task_generator(), True)
-    actual_ex = await comparison_utils.assert_throws(
-        test_routine, ValueError)
-    assert "th" == str(actual_ex)
-
-async def test_wrap_timeout_task_6():
-    async def task_generator():
-        raise KabomuIOError("2gh")
-    async def test_routine():
-        await protocol_utils_internal.wrap_timeout_task(
-            task_generator(), False)
-    actual_ex = await comparison_utils.assert_throws(
-        test_routine, KabomuIOError)
-    assert "2gh" == str(actual_ex)
 
 async def test_run_timeout_scheduler_1():
     expected = {}

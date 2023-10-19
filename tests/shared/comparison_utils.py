@@ -1,10 +1,10 @@
-import sys
 import random
-from contextlib import AbstractAsyncContextManager
 
 import pytest
 
 from trio.abc import ReceiveStream, SendStream
+
+from kabomu.quasi_http_utils import _get_optional_attr
 
 def create_byte_array_output_stream():
     buffer = bytearray()
@@ -78,6 +78,12 @@ async def read_all_bytes(stream: ReceiveStream):
         raw_data.extend(next_chunk)
     return raw_data
 
+def concat_buffers(*args):
+    raw_data = bytearray()
+    for next_chunk in args:
+        raw_data.extend(next_chunk)
+    return raw_data
+
 async def assert_throws(proc, expected_cls=None):
     except_called = False
     err = None
@@ -93,3 +99,51 @@ async def assert_throws(proc, expected_cls=None):
         expected_cls = expected_cls if expected_cls else BaseException
         pytest.fail(f"DID NOT RAISE {expected_cls}")
     return err
+
+async def compare_requests(
+        actual, expected, expected_req_body_bytes):
+    if not actual or not expected:
+        assert actual is expected
+        return
+    
+    assert _get_optional_attr(actual, "http_method") ==\
+        _get_optional_attr(expected, "http_method")
+    assert _get_optional_attr(actual, "http_version") ==\
+        _get_optional_attr(expected, "http_version")
+    assert _get_optional_attr(actual, "content_length") ==\
+        _get_optional_attr(expected, "content_length")
+    assert _get_optional_attr(actual, "target") ==\
+        _get_optional_attr(expected, "target")
+    assert _get_optional_attr(actual, "headers") ==\
+        _get_optional_attr(expected, "headers")
+    await _compare_bodies(_get_optional_attr(actual, "body"),
+                          expected_req_body_bytes)
+
+
+async def compare_responses(
+        actual, expected, expected_res_body_bytes):
+    if not actual or not expected:
+        assert actual is expected
+        return
+    
+    assert _get_optional_attr(actual, "status_code") ==\
+        _get_optional_attr(expected, "status_code")
+    assert _get_optional_attr(actual, "http_version") ==\
+        _get_optional_attr(expected, "http_version")
+    assert _get_optional_attr(actual, "content_length") ==\
+        _get_optional_attr(expected, "content_length")
+    assert _get_optional_attr(actual, "http_status_message") ==\
+        _get_optional_attr(expected, "http_status_message")
+    assert _get_optional_attr(actual, "headers") ==\
+        _get_optional_attr(expected, "headers")
+    await _compare_bodies(_get_optional_attr(actual, "body"),
+                          expected_res_body_bytes)
+
+async def _compare_bodies(actual, expected_body_bytes):
+    if expected_body_bytes is None:
+        assert not actual
+        return
+    
+    assert actual
+    actual_body_bytes = await read_all_bytes(actual)
+    assert actual_body_bytes == expected_body_bytes

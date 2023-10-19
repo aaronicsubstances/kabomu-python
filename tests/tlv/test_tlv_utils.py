@@ -20,7 +20,7 @@ def test_encode_tag_and_length(tag: int, length: int, expected):
 
 @pytest.mark.parametrize("tag, length",  
     [
-        (0, 1),  
+        (0, 1),
         (-1, 1),
         (2, -1)
     ])

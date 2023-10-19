@@ -39,8 +39,8 @@ class StandardQuasiHttpServer:
                                       connection)
             await transport.release_connection(connection)
         except:
-            if connection:
-                await _abort(transport, connection, True)
+            #raise
+            await _abort(transport, connection, True)
             ex = sys.exc_info()[1]
             if isinstance(ex, QuasiHttpError):
                 raise
@@ -52,10 +52,8 @@ class StandardQuasiHttpServer:
 
 async def _process_accept(application, transport, connection):
     request = None
-    request_deserializer = _get_optional_attr(
-        transport, "request_deserializer")
-    if request_deserializer:
-        request = await request_deserializer(connection)
+    if hasattr(transport, "request_deserializer"):
+        request = await transport.request_deserializer(connection)
     if not request:
         request = await protocol_utils_internal.read_entity_from_transport(
             False, transport.get_readable_stream(connection),
@@ -67,10 +65,8 @@ async def _process_accept(application, transport, connection):
 
     try:
         response_serialized = False
-        response_serializer = _get_optional_attr(
-            transport, "response_serializer")
-        if response_serializer:
-            response_serialized = await response_serializer(
+        if hasattr(transport, "response_serializer"):
+            response_serialized = await transport.response_serializer(
                 connection, response)
         if not response_serialized:
             await protocol_utils_internal.write_entity_to_transport(

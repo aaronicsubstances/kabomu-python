@@ -1,6 +1,6 @@
 import sys
 
-from kabomu.quasi_http_utils import _get_optional_attr
+from kabomu.quasi_http_utils import _get_optional_attr, _bind_method
 from kabomu import protocol_utils_internal
 from kabomu.errors import MissingDependencyError,\
     QuasiHttpError,\
@@ -44,22 +44,18 @@ class StandardQuasiHttpClient:
                 connection, "timeout_scheduler")
             if timeout_scheduler:
                 async def proc():
-                    return _process_send(
+                    return await _process_send(
                         request, request_func,
                         transport, connection)
                 response = await protocol_utils_internal.run_timeout_scheduler(
                     timeout_scheduler, True, proc)
             else:
-                response_promise = _process_send(
+                response = await _process_send(
                     request, request_func, transport, connection)
-                timeout_task = _get_optional_attr(
-                    connection, "timeout_task")
-                if timeout_task:
-                    pass
-                response = await response_promise
             await _abort(transport, connection, False, response)
             return response
         except:
+            #raise
             if connection:
                 await _abort(transport, connection, True)
             ex = sys.exc_info()[1]
@@ -83,11 +79,9 @@ async def _process_send(request, request_func, transport, connection):
 
     # send entire request first before
     # receiving of response.
-    request_serializer = _get_optional_attr(
-        transport, "request_serializer")
     request_serialized = False
-    if request_serializer:
-        request_serialized = await request_serializer(
+    if hasattr(transport, "request_serializer"):
+        request_serialized = await transport.request_serializer(
             connection, request)
     if not request_serialized:
         await protocol_utils_internal.write_entity_to_transport(
@@ -95,17 +89,16 @@ async def _process_send(request, request_func, transport, connection):
             connection)
 
     response = None
-    response_deserializer = _get_optional_attr(
-        transport, "response_deserializer")
-    if response_deserializer:
-        response = await response_deserializer(connection)
+    if hasattr(transport, "response_deserializer"):
+        response = await transport.response_deserializer(connection)
     if not response:
         response = await protocol_utils_internal.read_entity_from_transport(
             True, transport.get_readable_stream(connection),
             connection)
-        async def release_func(_):
+        async def release_func(self):
             await transport.release_connection(connection, None)
-        response.release = release_func
+        response.release = _bind_method(
+            release_func, response)
     return response
 
 async def _abort(transport, connection, error_occured, response=None):

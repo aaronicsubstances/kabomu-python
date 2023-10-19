@@ -2,8 +2,6 @@ import pytest
 
 from kabomu import misc_utils_internal
 
-from tests.shared import comparison_utils
-
 @pytest.mark.parametrize("v, expected",  
     [
         (2001, bytes([0, 0, 7, 0xd1])),

@@ -72,6 +72,9 @@ def _get_optional_attr(instance, *args):
         instance = getattr(instance, n)
     return instance
 
+def _bind_method(proc, instance):
+    return proc.__get__(instance, instance.__class__)
+
 def merge_processing_options(preferred, fallback):
     if preferred is None or fallback is None:
         return preferred if preferred is not None else fallback

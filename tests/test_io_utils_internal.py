@@ -48,13 +48,10 @@ async def test_read_bytes_fully_for_errors():
     # assert
     assert read_buffer == bytes([0, 1, 2, 3, 4])
 
-    actual_ex = None
-    try:
+    async def test_routine():
         await io_utils_internal.read_bytes_fully(reader, 5)
-    except KabomuIOError as ex:
-        actual_ex = ex
-    if not actual_ex:
-        pytest.fail("expected KabomuIOError")
+    actual_ex = await comparison_utils.assert_throws(
+        test_routine, KabomuIOError)
     assert "end of read" in str(actual_ex)
 
 @pytest.mark.parametrize("src_data",  

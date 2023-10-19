@@ -16,14 +16,14 @@ from kabomu.errors import IllegalArgumentError, ExpectationViolationError,\
     QUASI_HTTP_ERROR_REASON_MESSAGE_LENGTH_LIMIT_EXCEEDED
 
 async def wrap_timeout_task(timeout_task, for_client):
-    timeout_msg = "send timeout" if for_client else "receive_timeout"
+    timeout_msg = "send timeout" if for_client else "receive timeout"
     if await timeout_task:
         raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_TIMEOUT,
             timeout_msg)
     
 async def run_timeout_scheduler(
         timeout_scheduler, for_client, proc):
-    timeout_msg = "send timeout" if for_client else "receive_timeout"
+    timeout_msg = "send timeout" if for_client else "receive timeout"
     result = await timeout_scheduler(proc)
     error = _get_optional_attr(result, "error")
     if error:
@@ -33,12 +33,78 @@ async def run_timeout_scheduler(
             timeout_msg)
 
     response = _get_optional_attr(result, "response")
-    if for_client and not response:
-        raise QuasiHttpError("no response from timeout scheduler")
+    if for_client and response is None:
+        raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_GENERAL,
+            "no response from timeout scheduler")
     return response
 
 def validate_http_header_section(is_response, csv_data):
-    pass
+    if not csv_data:
+        raise ExpectationViolationError(
+            "expected csv to contain at least the special header")
+    special_header = csv_data[0]
+    if len(special_header) != 4:
+        raise ExpectationViolationError(
+            "expected special header to have 4 values " +
+            f"instead of {len(special_header)}")
+    tag = "status" if is_response else "request"
+    for i in range(len(special_header)):
+        item = special_header[i]
+        if not contains_only_printable_ascii_chars(
+                item, is_response and i == 2):
+            raise QuasiHttpError(
+                QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
+                    f"quasi http {tag} line " +
+                    "field contains spaces, newlines or " +
+                    "non-printable ASCII characters: " +
+                    item)
+    for row in csv_data[1:]:
+        if len(row) < 2:
+            raise ExpectationViolationError(
+                "expected row to have at least 2 values " +
+                f"instead of {len(row)}")
+        header_name = row[0]
+        if not contains_only_header_name_chars(header_name):
+            raise QuasiHttpError(
+                QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
+                    "quasi http header name contains characters " +
+                    "other than hyphen and English alphabets: " +
+                    header_name)
+        for header_value in row[1:]:
+            if not contains_only_printable_ascii_chars(header_value, True):
+                raise QuasiHttpError(
+                    QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
+                        "quasi http header value contains newlines or " +
+                        "non-printable ASCII characters: " +
+                        header_value)
+
+def contains_only_header_name_chars(v):
+    for c in v:
+        c = ord(c)
+        if c >= 48 and c < 58:
+            # digits.
+            pass
+        elif c >= 65 and c < 91:
+            # upper case
+            pass
+        elif c >= 97 and c < 123:
+            # lower case
+            pass
+        elif c == 45:
+            # hyphen
+            pass
+        else:
+            return False
+    return True
+
+def contains_only_printable_ascii_chars(v, allow_space):
+    for c in v:
+        c = ord(c)
+        if c < 32 or c > 126:
+            return False
+        if not allow_space and c == 32:
+            return False
+    return True
 
 def encode_quasi_http_headers(is_response, req_or_status_line,
                               remaining_headers):
@@ -47,28 +113,39 @@ def encode_quasi_http_headers(is_response, req_or_status_line,
     csv_data = []
     special_header = []
     for v in req_or_status_line:
-        special_header.append(str(v) if v else "")
+        special_header.append('' if v is None else str(v))
     csv_data.append(special_header)
     if remaining_headers:
         for header_name, header_value in remaining_headers.items():
+            header_name = '' if header_name is None else str(header_name)
             if not header_name:
                 raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
                     "quasi http header name cannot be empty")
-            if not header_value:
+            # allow string values not inside an array.
+            if type(header_value) == str:
+                header_value = [header_value]
+            if header_value is None or not len(header_value):
                 continue
-            header_row = []
+            header_row = [header_name]
             for v in header_value:
+                v = "" if v is None else str(v)
                 if not v:
                     raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
                         "quasi http header value cannot be empty")
-                header_row.append(str(v))
+                header_row.append(v)
             csv_data.append(header_row)
 
     validate_http_header_section(is_response, csv_data)
 
     with io.StringIO(newline='') as serialized:
-        serializer = csv.writer(serialized)
-        serializer.writerows(csv_data)
+        for row in csv_data:
+            add_comma = False
+            for col in row:
+                if add_comma:
+                    serialized.write(',')
+                serialized.write('"' + col.replace('"', '""') + '"')
+                add_comma = True
+            serialized.write('\n')
         return misc_utils_internal.string_to_bytes(
             serialized.getvalue())
     
@@ -78,7 +155,7 @@ def decode_quasi_http_headers(is_response, buffer,
     try:
         with io.StringIO(misc_utils_internal.bytes_to_string(
                 buffer)) as s:
-            deserializer = csv.reader(s)
+            deserializer = csv.reader(s,strict=True)
             for row in deserializer:
                 csv_data.append(row)
     except Exception as ex:
@@ -98,8 +175,7 @@ def decode_quasi_http_headers(is_response, buffer,
         raise QuasiHttpError(
             QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION,
             f"invalid quasi http {tag} line")
-    for i in range(1, len(csv_data)):
-        header_row = csv_data[i]
+    for header_row in csv_data[1:]:
         if len(header_row) < 2:
             continue
         # merge headers with the same normalized name in different rows.
@@ -241,7 +317,8 @@ async def read_entity_from_transport(
                 tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK,
                 tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK_EXT)
     if is_response:
-        response = SimpleNamespace(environment=None, disposer=None)
+        response = SimpleNamespace(environment=None,
+                                   release=default_release_func)
         response.http_version = req_or_status_line[0]
         try:
             response.status_code = misc_utils_internal.parse_int_32(
@@ -265,7 +342,7 @@ async def read_entity_from_transport(
         response.body = body
         return response
     else:
-        request = SimpleNamespace(disposer=None)
+        request = SimpleNamespace(release=default_release_func)
         request.environment = _get_optional_attr(
             connection, "environment")
         request.http_method = req_or_status_line[0]
@@ -276,4 +353,5 @@ async def read_entity_from_transport(
         request.body = body
         return request
 
-
+async def default_release_func(_):
+    pass

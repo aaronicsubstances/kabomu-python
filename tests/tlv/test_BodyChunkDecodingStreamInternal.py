@@ -112,11 +112,8 @@ async def test_decoding_for_errors(src_data, expected_tag,
         instance, expected_tag, tag_to_ignore)
     
     # act
-    actual_ex = None
-    try:
+    async def test_routine():
         await comparison_utils.read_all_bytes(instance)
-    except KabomuIOError as ex:
-        actual_ex = ex
-    if not actual_ex:
-        pytest.fail("expected KabomuIOError")
+    actual_ex = await comparison_utils.assert_throws(
+        test_routine, KabomuIOError)
     assert expected in str(actual_ex)

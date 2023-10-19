@@ -1,3 +1,4 @@
+import sys
 import random
 from contextlib import AbstractAsyncContextManager
 
@@ -77,19 +78,18 @@ async def read_all_bytes(stream: ReceiveStream):
         raw_data.extend(next_chunk)
     return raw_data
 
-def assert_throws(*args, **kwargs):
-    class ContextManager(AbstractAsyncContextManager):
-        def __init__(self):
-            self.value = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            with pytest.raises(*args, **kwargs) as retExc:
-                if exc:
-                    raise exc
-            self.value = retExc.value
-            return True
-
-    return ContextManager()
+async def assert_throws(proc, expected_cls=None):
+    except_called = False
+    err = None
+    try:
+        await proc()
+    except BaseException as e:
+        err = e
+        if expected_cls:
+            if not isinstance(err, expected_cls):
+                raise
+        except_called = True
+    if not except_called:
+        expected_cls = expected_cls if expected_cls else BaseException
+        pytest.fail(f"DID NOT RAISE {expected_cls}")
+    return err

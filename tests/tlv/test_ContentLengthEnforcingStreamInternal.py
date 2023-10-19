@@ -47,13 +47,10 @@ async def test_reading_for_errors(content_length, src_data):
         stream, content_length)
 
     # act
-    actual_ex = None
-    try:
+    async def test_routine():
         await comparison_utils.read_all_bytes(instance)
-    except KabomuIOError as ex:
-        actual_ex = ex
-    if not actual_ex:
-        pytest.fail("expected KabomuIOError")
+    actual_ex = await comparison_utils.assert_throws(
+        test_routine, KabomuIOError)
     assert "end of read" in str(actual_ex)
 
 async def test_zero_byte_reads():

@@ -59,7 +59,7 @@ async def _process_accept(application, transport, connection):
             False, transport.get_readable_stream(connection),
             connection)
 
-    response = await application(request)
+    response = await application.process_request(request)
     if not response:
         raise QuasiHttpError("no response")
 

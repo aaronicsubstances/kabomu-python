@@ -2,13 +2,11 @@ import pytest
 
 from types import SimpleNamespace
 
+from kabomu.abstractions import IQuasiHttpApplication,\
+    IQuasiHttpAltTransport, IQuasiHttpClientTransport,\
+    IQuasiHttpServerTransport
 from kabomu.StandardQuasiHttpClient import StandardQuasiHttpClient
 from kabomu.StandardQuasiHttpServer import StandardQuasiHttpServer
-from kabomu.errors import KabomuIOError,\
-    QuasiHttpError,\
-    QUASI_HTTP_ERROR_REASON_GENERAL,\
-    QUASI_HTTP_ERROR_REASON_TIMEOUT,\
-    QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION
 
 from kabomu.quasi_http_utils import _bind_method
 
@@ -127,13 +125,14 @@ async def test_request_serialization(
         return True
     server_transport.response_serializer = _bind_method(
         server_transport_response_serializer, server_transport)
-    async def server_application(req):
-        nonlocal actual_request
-        actual_request = req
-        return dummy_res
     server = StandardQuasiHttpServer()
     server.transport = server_transport
-    server.application = server_application
+    class ServerApplication(IQuasiHttpApplication):
+        async def process_request(self, req):
+            nonlocal actual_request
+            actual_request = req
+            return dummy_res
+    server.application = ServerApplication()
     await server.accept_connection(server_connection)
 
     # assert
@@ -327,10 +326,11 @@ async def test_response_serialization(
         server_transport_request_deseriailizer, server_transport)
     server = StandardQuasiHttpServer()
     server.transport = server_transport
-    async def server_application(req):
-        assert req is dummy_req
-        return res
-    server.application = server_application
+    class ServerApplication(IQuasiHttpApplication):
+        async def process_request(self, req):
+            assert req is dummy_req
+            return res
+    server.application = ServerApplication()
     await server.accept_connection(server_connection)
 
     if expected_serialized_res:
@@ -554,7 +554,7 @@ async def test_response_serialization_for_errors(
 def create_client_transport_impl(
         initialize_serializer_functions):
     if initialize_serializer_functions:
-        class TransportImpl():
+        class TransportImpl(IQuasiHttpClientTransport, IQuasiHttpAltTransport):
             def get_readable_stream(self, connection):
                 return connection.readable_stream
             def get_writable_stream(self, connection):
@@ -569,6 +569,10 @@ def create_client_transport_impl(
                 pass
             async def response_deserializer(self, connection):
                 pass
+            async def allocate_connection(self, remote_endpoint, send_options):
+                return await super().allocate_connection(remote_endpoint, send_options)
+            async def establish_connection(self, connection):
+                return await super().establish_connection(connection)
 
         return TransportImpl()
     else:
@@ -590,7 +594,7 @@ def create_client_transport_impl(
 def create_server_transport_impl(
         initialize_serializer_functions):
     if initialize_serializer_functions:
-        class TransportImpl():
+        class TransportImpl(IQuasiHttpServerTransport, IQuasiHttpAltTransport):
             def get_readable_stream(self, connection):
                 return connection.readable_stream
             def get_writable_stream(self, connection):

@@ -1,10 +1,11 @@
 import csv
 import io
-from types import SimpleNamespace
 
 from trio.abc import ReceiveStream, SendStream
 
-from kabomu.quasi_http_utils import _get_optional_attr, _bind_method
+from kabomu.abstractions import DefaultQuasiHttpResponse,\
+    DefaultQuasiHttpRequest
+from kabomu.quasi_http_utils import _get_optional_attr
 from kabomu.tlv import tlv_utils
 from kabomu import misc_utils_internal, io_utils_internal, quasi_http_utils
 from kabomu.errors import IllegalArgumentError, ExpectationViolationError,\
@@ -313,8 +314,7 @@ async def read_entity_from_transport(
                 tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK,
                 tlv_utils.TAG_FOR_QUASI_HTTP_BODY_CHUNK_EXT)
     if is_response:
-        response = SimpleNamespace(environment=None)
-        response.release = _bind_method(default_release_func, response)
+        response = DefaultQuasiHttpResponse()
         response.http_version = req_or_status_line[0]
         try:
             response.status_code = misc_utils_internal.parse_int_32(
@@ -338,8 +338,7 @@ async def read_entity_from_transport(
         response.body = body
         return response
     else:
-        request = SimpleNamespace()
-        request.release = _bind_method(default_release_func, request)
+        request = DefaultQuasiHttpRequest()
         request.environment = _get_optional_attr(
             connection, "environment")
         request.http_method = req_or_status_line[0]
@@ -349,8 +348,3 @@ async def read_entity_from_transport(
         request.headers = headers_receiver
         request.body = body
         return request
-
-async def default_release_func(self):
-    body = _get_optional_attr(self, "body")
-    if body is not None:
-        await body.aclose()

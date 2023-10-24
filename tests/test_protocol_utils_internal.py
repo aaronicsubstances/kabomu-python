@@ -2,10 +2,9 @@ import pytest
 
 from types import SimpleNamespace
 
+from kabomu.abstractions import IQuasiHttpConnection
 from kabomu import protocol_utils_internal
-from kabomu.errors import KabomuIOError,\
-    QuasiHttpError,\
-    QUASI_HTTP_ERROR_REASON_GENERAL,\
+from kabomu.errors import QuasiHttpError,\
     QUASI_HTTP_ERROR_REASON_TIMEOUT,\
     QUASI_HTTP_ERROR_REASON_PROTOCOL_VIOLATION
 
@@ -15,56 +14,62 @@ async def test_run_timeout_scheduler_1():
     expected = {}
     async def proc():
         return expected
-    async def instance(f):
-        result = await f()
-        return SimpleNamespace(timeout=False,
-                               response=result)
+    class TestConnection(IQuasiHttpConnection):
+        def environment(self):
+            return None
+        def processing_options(self):
+            return None
+        async def schedule_timeout(self, f):
+            result = await f()
+            return SimpleNamespace(
+                timeout=False, response=result)
     actual = await protocol_utils_internal.run_timeout_scheduler(
-        instance, True, proc)
+        TestConnection(), True, proc)
     assert actual is expected
 
 async def test_run_timeout_scheduler_2():
-    expected = None
+    expected = {}
     async def proc():
         return expected
-    async def instance(f):
-        result = await f()
-        return SimpleNamespace(timeout=False,
-                               response=result)
+    class TestConnection(IQuasiHttpConnection):
+        def environment(self):
+            return None
+        def processing_options(self):
+            return None
+        async def schedule_timeout(self, f):
+            result = await f()
+            return SimpleNamespace(
+                timeout=False, response=result)
     actual = await protocol_utils_internal.run_timeout_scheduler(
-        instance, False, proc)
-    assert actual is expected
+        TestConnection(), False, proc)
+    assert actual is True
 
 async def test_run_timeout_scheduler_3():
     async def proc():
-        pass
-    async def instance(f):
-        pass
+        raise NotImplementedError()
     actual = await protocol_utils_internal.run_timeout_scheduler(
-        instance, False, proc)
+        "tea", False, proc)
     assert actual is None
 
 async def test_run_timeout_scheduler_4():
     async def proc():
         pass
-    async def instance(f):
-        pass
-    async def test_routine():
-        await protocol_utils_internal.run_timeout_scheduler(
-            instance, True, proc)
-    actual_ex = await comparison_utils.assert_throws(
-        test_routine, QuasiHttpError)
-    assert str(actual_ex) == "no response from timeout scheduler"
-    assert actual_ex.reason_code == QUASI_HTTP_ERROR_REASON_GENERAL
+    class TestConnection():
+        async def schedule_timeout(self, f):
+            pass
+    actual = await protocol_utils_internal.run_timeout_scheduler(
+        TestConnection(), True, proc)
+    assert actual is None
 
 async def test_run_timeout_scheduler_5():
     async def proc():
         pass
-    async def instance(f):
-        return SimpleNamespace(timeout=True)
+    class TestConnection:
+        async def schedule_timeout(self, f):
+            return SimpleNamespace(timeout=True)
     async def test_routine():
         await protocol_utils_internal.run_timeout_scheduler(
-            instance, True, proc)
+            TestConnection(), True, proc)
     actual_ex = await comparison_utils.assert_throws(
         test_routine, QuasiHttpError)
     assert str(actual_ex) == "send timeout"
@@ -73,11 +78,12 @@ async def test_run_timeout_scheduler_5():
 async def test_run_timeout_scheduler_6():
     async def proc():
         pass
-    async def instance(f):
-        return SimpleNamespace(timeout=True)
+    class TestConnection:
+        async def schedule_timeout(self, f):
+            return SimpleNamespace(timeout=True)
     async def test_routine():
         await protocol_utils_internal.run_timeout_scheduler(
-            instance, False, proc)
+            TestConnection(), False, proc)
     actual_ex = await comparison_utils.assert_throws(
         test_routine, QuasiHttpError)
     assert str(actual_ex) == "receive timeout"
@@ -86,12 +92,13 @@ async def test_run_timeout_scheduler_6():
 async def test_run_timeout_scheduler_7():
     async def proc():
         pass
-    async def instance(f):
-        return SimpleNamespace(timeout=True,
-                               error=ValueError("risk"))
+    class TestConnection:
+        async def schedule_timeout(self, f):
+            return SimpleNamespace(timeout=True,
+                                   error=ValueError("risk"))
     async def test_routine():
         await protocol_utils_internal.run_timeout_scheduler(
-            instance, False, proc)
+            TestConnection(), False, proc)
     actual_ex = await comparison_utils.assert_throws(
         test_routine, ValueError)
     assert str(actual_ex) == "risk"

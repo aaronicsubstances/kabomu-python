@@ -17,21 +17,28 @@ from kabomu.errors import IllegalArgumentError, ExpectationViolationError,\
     QUASI_HTTP_ERROR_REASON_MESSAGE_LENGTH_LIMIT_EXCEEDED
 
 async def run_timeout_scheduler(
-        timeout_scheduler, for_client, proc):
-    timeout_msg = "send timeout" if for_client else "receive timeout"
-    result = await timeout_scheduler(proc)
+        connection, for_client, proc):
+    if not hasattr(connection, "schedule_timeout"):
+        return
+    result = await connection.schedule_timeout(proc)
+    if result is None:
+        return
     error = _get_optional_attr(result, "error")
     if error:
         raise error
     if _get_optional_attr(result, "timeout"):
+        timeout_msg = "send timeout" if for_client else "receive timeout"
         raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_TIMEOUT,
             timeout_msg)
 
-    response = _get_optional_attr(result, "response")
-    if for_client and response is None:
-        raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_GENERAL,
-            "no response from timeout scheduler")
-    return response
+    if for_client:
+        response = _get_optional_attr(result, "response")
+        if response is None:
+            raise QuasiHttpError(QUASI_HTTP_ERROR_REASON_GENERAL,
+                "no response from timeout scheduler")
+        return response
+    else:
+        return True
 
 def validate_http_header_section(is_response, csv_data):
     if not csv_data:

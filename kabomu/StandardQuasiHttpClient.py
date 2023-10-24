@@ -7,8 +7,8 @@ from kabomu.errors import MissingDependencyError,\
     QUASI_HTTP_ERROR_REASON_GENERAL
 
 class StandardQuasiHttpClient:
-    def __init__(self):
-        self.transport = None
+    def __init__(self, transport=None):
+        self.transport = transport
 
     async def send(self, remote_endpoint, request, options=None):
         if not request:
@@ -39,17 +39,14 @@ class StandardQuasiHttpClient:
                 remote_endpoint, send_options)
             if not connection:
                 raise QuasiHttpError("no connection")
-            response = None
-            timeout_scheduler = _get_optional_attr(
-                connection, "timeout_scheduler")
-            if timeout_scheduler:
-                async def proc():
-                    return await _process_send(
-                        request, request_func,
-                        transport, connection)
-                response = await protocol_utils_internal.run_timeout_scheduler(
-                    timeout_scheduler, True, proc)
-            else:
+
+            async def proc():
+                return await _process_send(
+                    request, request_func,
+                    transport, connection)
+            response = await protocol_utils_internal.run_timeout_scheduler(
+                connection, True, proc)
+            if not response:
                 response = await _process_send(
                     request, request_func, transport, connection)
             await _abort(transport, connection, False, response)

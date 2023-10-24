@@ -41,14 +41,21 @@ class IQuasiHttpClientTransport(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
 
-class QuasiHttpConnection():
-    def __init__(self,
-                 processing_options=None,
-                 timeout_scheduler=None,
-                 environment=None):
-        self.processing_options = processing_options
-        self.timeout_scheduler = timeout_scheduler
-        self.environment = environment
+class IQuasiHttpConnection(metaclass=abc.ABCMeta):
+
+    @property
+    @abc.abstractmethod
+    def processing_options(self):
+        raise NotImplementedError()
+
+    @property
+    @abc.abstractmethod
+    def environment(self):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    async def schedule_timeout(self, proc):
+        raise NotImplementedError()
 
 class QuasiHttpProcessingOptions():
     def __init__(self,
@@ -127,3 +134,12 @@ class IQuasiHttpApplication(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def process_request(self, request):
         raise NotImplementedError()
+
+class DefaultTimeoutResult:
+    def __init__(self,
+                 response=None,
+                 timeout=True,
+                 error=None):
+        self.response = response
+        self.timeout = timeout
+        self.error = error

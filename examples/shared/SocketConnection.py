@@ -16,6 +16,8 @@ class SocketConnection(IQuasiHttpConnection):
             processing_options, fallback_processing_options)
         if self._processing_options is None:
             self._processing_options = QuasiHttpProcessingOptions()
+        self.timeout_scope = None
+        self.cancel_scope = None
 
     def environment(self):
         return None
@@ -28,13 +30,12 @@ class SocketConnection(IQuasiHttpConnection):
         if not timeout_milis or timeout_milis <= 0:
             return
         self.cancel_scope = trio.CancelScope()
-        self.timeout_scope = trio.fail_after(timeout_milis / 1000.0)
-        try:
-            with self.timeout_scope:
-                with self.cancel_scope:
-                    response = await proc()
-                    return DefaultTimeoutResult(response=response)
-        except trio.TooSlowError:
+        self.timeout_scope = trio.move_on_after(timeout_milis / 1000.0)
+        with self.timeout_scope:
+            with self.cancel_scope:
+                response = await proc()
+                return DefaultTimeoutResult(response=response)
+        if self.timeout_scope.cancelled_caught:
             return DefaultTimeoutResult(timeout=True)
     
     async def release(self, response):
@@ -43,6 +44,6 @@ class SocketConnection(IQuasiHttpConnection):
             cancel_scope.cancel()
         if timeout_scope:
             timeout_scope.cancel()
-        if response and response.body:
+        if response and hasattr(response, 'body') and response.body:
             return
         await self.socket.aclose()

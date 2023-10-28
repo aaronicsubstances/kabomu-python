@@ -1,14 +1,21 @@
+import configparser
+
 import trio
 
-from kabomu import StandardQuasiHttpClient
+from kabomu.StandardQuasiHttpClient import StandardQuasiHttpClient
 from kabomu.abstractions import QuasiHttpProcessingOptions
 
-from LocalhostTcpClientTransport import LocalhostTcpClientTransport
-from FileSender import start_transferring_files
+from shared import AppLogger
+from shared.LocalhostTcpClientTransport import LocalhostTcpClientTransport
+from shared.FileSender import start_transferring_files
 
 async def main():
-    server_port = 5001
-    upload_dir_path = "logs/client"
+    AppLogger.config()
+    config = configparser.ConfigParser()
+    config.read('example.ini')
+    default_section = config["DEFAULT"]
+    server_port = int(default_section.get('SERVER_PORT', 5001))
+    upload_dir_path = default_section.get("UPLOAD_DIR", "logs/client")
     transport = LocalhostTcpClientTransport(
         default_send_options=QuasiHttpProcessingOptions(
             timeout_millis=5_000

@@ -1,0 +1,4 @@
+PORT=5001
+SERVER_PORT=5001
+UPLOAD_DIR=logs/client
+SAVE_DIR=logs/server

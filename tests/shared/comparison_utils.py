@@ -4,6 +4,7 @@ import pytest
 
 from trio.abc import ReceiveStream, SendStream
 
+from kabomu import io_utils_internal
 from kabomu.quasi_http_utils import _get_optional_attr
 
 def create_byte_array_output_stream():
@@ -72,7 +73,7 @@ async def read_as_string(stream: ReceiveStream):
 async def read_all_bytes(stream: ReceiveStream):
     raw_data = bytearray()
     while True:
-        next_chunk = await stream.receive_some()
+        next_chunk = await io_utils_internal.receive_some(stream)
         if not next_chunk:
             break
         raw_data.extend(next_chunk)

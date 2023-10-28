@@ -1,8 +1,10 @@
+import math
+
 import trio
 
 from kabomu.abstractions import IQuasiHttpClientTransport
 
-from SocketConnection import SocketConnection
+from shared.SocketConnection import SocketConnection
 
 class LocalhostTcpClientTransport(IQuasiHttpClientTransport):
     def __init__(self, default_send_options):
@@ -10,7 +12,8 @@ class LocalhostTcpClientTransport(IQuasiHttpClientTransport):
 
     async def allocate_connection(self, remote_endpoint, send_options):
         port = remote_endpoint
-        socket = await trio.open_tcp_stream("::1", port)
+        socket = await trio.open_tcp_stream("::1", port,
+                                            happy_eyeballs_delay=math.inf)
         connection = SocketConnection(socket, port, send_options,
                                       self.default_send_options)
         return connection

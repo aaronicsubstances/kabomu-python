@@ -138,7 +138,7 @@ class IQuasiHttpApplication(metaclass=abc.ABCMeta):
 class DefaultTimeoutResult:
     def __init__(self,
                  response=None,
-                 timeout=True,
+                 timeout=False,
                  error=None):
         self.response = response
         self.timeout = timeout

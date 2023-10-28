@@ -129,4 +129,5 @@ dmypy.json
 .pyre/
 
 /examples/**/poetry.lock
+/examples/**/settings.ini
 logs

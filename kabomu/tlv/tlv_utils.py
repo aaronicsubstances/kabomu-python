@@ -44,9 +44,11 @@ def create_content_length_enforcing_stream(backing_stream: ReceiveStream,
             bytes_to_read = min(self._bytes_left_to_read, int(max_bytes))
             next_chunk = b""
             if bytes_to_read:
-                next_chunk = await backing_stream.receive_some(bytes_to_read)
-            self._bytes_left_to_read -= len(next_chunk)
-            end_of_read = not next_chunk
+                next_chunk = await io_utils_internal.receive_some(
+                    backing_stream, bytes_to_read)
+            next_chunk_len = len(next_chunk)
+            self._bytes_left_to_read -= next_chunk_len
+            end_of_read = not next_chunk_len
             if end_of_read and self._bytes_left_to_read > 0:
                 raise KabomuIOError.create_end_of_read_error()
             return next_chunk
@@ -72,7 +74,8 @@ def create_max_length_enforcing_stream(backing_stream: ReceiveStream,
             bytes_to_read = min(self._bytes_left_to_read, int(max_bytes))
             next_chunk = b""
             if bytes_to_read:
-                next_chunk = await backing_stream.receive_some(bytes_to_read)
+                next_chunk = await io_utils_internal.receive_some(
+                    backing_stream, bytes_to_read)
             self._bytes_left_to_read -= len(next_chunk)
             if not self._bytes_left_to_read:
                 raise KabomuIOError(f"stream size exceeds limit of {max_length} bytes")
@@ -91,14 +94,18 @@ def create_tlv_encoding_writable_stream(backing_stream: SendStream,
             pass
         
         async def send_eof(self):
-            await backing_stream.send_all(
-                encode_tag_and_length(tag_to_use, 0))
+            await io_utils_internal.send_all(
+                backing_stream, encode_tag_and_length(tag_to_use, 0)
+            )
         
         async def send_all(self, data):
-            if data:
-                await backing_stream.send_all(
-                    encode_tag_and_length(tag_to_use, len(data)))
-                await backing_stream.send_all(data)
+            data_len = len(data)
+            if data_len:
+                await io_utils_internal.send_all(
+                    backing_stream,
+                    encode_tag_and_length(tag_to_use, data_len))
+                await io_utils_internal.send_all(
+                    backing_stream, data)
 
         def wait_send_all_might_not_block(self):
             return backing_stream.wait_send_all_might_not_block()
@@ -132,10 +139,12 @@ def create_tlv_decoding_readable_stream(
                     return b""
                 
             max_bytes = min(self._chunk_data_len_rem, int(max_bytes))
-            next_chunk = await backing_stream.receive_some(max_bytes)
-            if not next_chunk:
+            next_chunk = await io_utils_internal.receive_some(
+                backing_stream, max_bytes)
+            next_chunk_len = len(next_chunk)
+            if not next_chunk_len:
                 raise KabomuIOError.create_end_of_read_error()
-            self._chunk_data_len_rem -= len(next_chunk)
+            self._chunk_data_len_rem -= next_chunk_len
             return next_chunk
         
         async def _fetch_next_tag_and_length(self):

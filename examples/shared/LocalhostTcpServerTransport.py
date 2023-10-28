@@ -1,8 +1,10 @@
+import logging
+
 import trio
 
 from kabomu.abstractions import IQuasiHttpServerTransport
 
-from SocketConnection import SocketConnection
+from shared.SocketConnection import SocketConnection
 
 class LocalhostTcpServerTransport(IQuasiHttpServerTransport):
     
@@ -13,32 +15,31 @@ class LocalhostTcpServerTransport(IQuasiHttpServerTransport):
         self.default_processing_options = default_processing_options
         self.quasi_http_server  = quasi_http_server
         self.port = port
+        self.cancel_scope = None
 
     async def start(self):
-        self.server_socket = await trio.open_tcp_listeners(
-            self.port, "::1")
-        # don't wait
-        self.cancel_scope = trio.CancelScope()
-        self.accept_connections()
+        #async def receiver(socket):
+        #    await self.receive_connection(socket)
+        cancel_scope = trio.CancelScope()
+        self.cancel_scope = cancel_scope
+        with cancel_scope:
+            await trio.serve_tcp(self.receive_connection,
+                self.port, host="::1")
 
     async def stop(self):
-        self.cancel_scope.cancel()
+        cancel_scope = self.cancel_scope
+        if cancel_scope:
+            cancel_scope.cancel()
         with trio.move_on_after(1):
             pass
 
-    async def accept_connections(self):
-        async def receiver(socket):
-            await self.receive_connection(socket)
-        with self.cancel_scope:
-            trio.serve_listeners(receiver, self.server_socket)
-
-    async def receive_connections(self, socket):
+    async def receive_connection(self, socket):
         try:
             connection = SocketConnection(socket, None, None,
                                           self.default_processing_options)
             await self.quasi_http_server.accept_connection(connection)
-        except BaseException as ex:
-            print(f"connection processing error: {ex}")
+        except:
+            logging.warning("connection processing error", exc_info=1)
         
     async def release_connection(self, connection):
         await connection.release(None)

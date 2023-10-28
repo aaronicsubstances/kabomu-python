@@ -6,6 +6,12 @@ In a nutshell, Kabomu enables building quasi web applications that can connect e
 
 See the [repository for the .NET version](https://github.com/aaronicsubstances/cskabomu) for more details.
 
+## Install
+
+```
+pip install kabomu
+```
+
 ## Usage
 
 The entry classes of the libary are [StandardQuasiHttpClient](https://github.com/aaronicsubstances/kabomu-python/blob/master/kabomu/StandardQuasiHttpClient.py) and [StandardQuasiHttpServer](https://github.com/aaronicsubstances/kabomu-python/blob/master/kabomu/StandardQuasiHttpServer.py).

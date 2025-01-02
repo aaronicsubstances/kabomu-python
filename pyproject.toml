@@ -2,7 +2,7 @@
 name = "kabomu"
 version = "0.9.1"
 description = "Kabomu libary for Python"
-authors = ["Aaron Baffour-Awuah <aaronbaffourawuah@gmail.com>"]
+authors = ["aaronicsubstances"]
 license = "MPL-2.0"
 readme = "README-pypi.md"
 repository = "https://github.com/aaronicsubstances/kabomu-python"
